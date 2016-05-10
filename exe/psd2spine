@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'fileutils'
+require 'psd'
+require 'pry'
+
+opt = OptionParser.new
+params = {}
+opt.on('-o out', '--out', 'Output directory path') {|v| params[:out] = v }
+opt.parse! ARGV
+
+psd_path = File.expand_path(ARGV.last)
+  
+psd = PSD.new(psd_path)
+psd.parse!
+
+dst_dir = params[:out] ||
+           File.join(File.dirname(psd_path),
+                     File.basename(psd_path, '.*'))
+json_path = File.join(dst_dir, File.basename(psd_path, '.*') + '.json')
+
+FileUtils.mkdir_p(dst_dir)
+
+json = {
+  bones: [{ name: 'root' }],
+  slots: [],
+  skins: { default: {} },
+  animations: {},
+}
+
+psd.tree.descendant_layers.each do |layer|
+  json[:slots] << {
+    name: layer.name,
+    bone: 'root',
+    attachment: layer.name
+  }
+
+  json[:skins][:default][layer.name] = {
+    layer.name => {
+      x: layer.left + (layer.width * 0.5).floor - (psd.image.width * 0.5),
+      y: psd.image.height - (layer.top + (layer.height * 0.5).floor),
+      rotation: 0,
+      width: layer.width,
+      height: layer.height
+    }
+  }
+
+  layer_png_path = File.join(dst_dir, "#{layer.name.gsub(/\//, '_')}.png")
+  puts layer_png_path
+  layer.image.save_as_png layer_png_path
+end
+
+Pry::ColorPrinter.pp json
+puts json_path
+File.write json_path, JSON.dump(json)
